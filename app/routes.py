@@ -10,6 +10,13 @@ from .auth import validate_token
 vitals_bp   = Blueprint("vitals",   __name__, url_prefix="/vitals")
 patients_bp = Blueprint("patients", __name__, url_prefix="/patients")
 alerts_bp   = Blueprint("alerts",   __name__, url_prefix="/alerts")
+health_bp   = Blueprint("health",   __name__)
+
+
+@health_bp.route("/health", methods=["GET"])
+def health():
+    """Liveness probe — used by Docker HEALTHCHECK and orchestrators."""
+    return jsonify({"status": "ok"}), 200
 
 
 def _get_staff_id(req) -> str | None:

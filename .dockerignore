@@ -1,0 +1,36 @@
+# Python bytecode and caches
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+htmlcov
+.coverage
+coverage.xml
+
+# Secrets — never bake into the image
+.env
+.env.*
+
+# Git metadata
+.git
+.gitignore
+
+# Test artefacts
+tests/__pycache__
+
+# Skill example outputs (regenerated per-run; not needed in image)
+skills/*/examples/
+
+# Editor / OS junk
+.vscode
+.idea
+.DS_Store
+
+# CI/build artefacts that don't belong in the image
+.github
+Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
