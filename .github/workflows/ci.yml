@@ -1,0 +1,209 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ── 1. Lint ──────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (flake8 + black)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install lint tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black
+
+      - name: Run flake8
+        run: flake8 app/ tests/
+
+      - name: Run black --check
+        run: black --check app/ tests/
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Lint" >> $GITHUB_STEP_SUMMARY
+          echo "- flake8: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- black --check: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+  # ── 2. Tests (depends on lint) ───────────────────────────────────────────────
+  test:
+    name: Test (pytest + coverage)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest pytest-cov
+
+      - name: Run pytest with coverage
+        run: |
+          pytest tests/ \
+            --cov=app \
+            --cov-report=xml \
+            --cov-report=term \
+            --cov-fail-under=80
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Test" >> $GITHUB_STEP_SUMMARY
+          echo "- pytest result: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage threshold: 80%" >> $GITHUB_STEP_SUMMARY
+          echo "- Coverage report uploaded as artifact: \`coverage-report\`" >> $GITHUB_STEP_SUMMARY
+
+  # ── 3. Security (depends on lint, parallel with test) ────────────────────────
+  security:
+    name: Security (bandit + safety)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install security tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run bandit (static analysis)
+        run: bandit -r app/ -ll
+
+      - name: Run safety (dependency CVE scan)
+        run: safety check -r requirements.txt
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Security" >> $GITHUB_STEP_SUMMARY
+          echo "- bandit (medium+): ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- safety (CVE scan): ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+
+  # ── 4. AI Skills (depends on test + security) ────────────────────────────────
+  ai-skills:
+    name: AI Skill — Security Audit
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+
+      - name: Install anthropic SDK
+        run: |
+          python -m pip install --upgrade pip
+          pip install anthropic
+
+      - name: Run security-audit Skill
+        run: |
+          python plugins/run_skill.py security-audit \
+            --scope app/vitals.py \
+            --context CLAUDE.md \
+            --no-save | tee /tmp/security_audit.txt
+
+      - name: Block on CRITICAL findings
+        run: |
+          python - <<'EOF'
+          import json, re, sys
+          from pathlib import Path
+
+          content = Path("/tmp/security_audit.txt").read_text()
+          # The runner prints colored headers around the JSON; strip ANSI first.
+          content = re.sub(r"\x1b\[[0-9;]*m", "", content)
+
+          start = content.find("[")
+          end   = content.rfind("]") + 1
+          if start == -1 or end <= start:
+              print("No JSON array found in security-audit output — failing closed")
+              sys.exit(1)
+
+          try:
+              findings = json.loads(content[start:end])
+          except json.JSONDecodeError as e:
+              print(f"Could not parse security-audit JSON: {e} — failing closed")
+              sys.exit(1)
+
+          criticals = [f for f in findings if f.get("severity") == "CRITICAL"]
+          print(f"Total findings: {len(findings)}  CRITICAL: {len(criticals)}")
+          for c in criticals:
+              line = c.get("line", "?")
+              desc = (c.get("description") or "")[:140]
+              print(f"  CRITICAL line {line}: {desc}")
+
+          if criticals:
+              print("BLOCKED: CRITICAL security finding(s) detected")
+              sys.exit(1)
+          print("AI security-audit passed — no CRITICAL findings")
+          EOF
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## AI Skill — Security Audit" >> $GITHUB_STEP_SUMMARY
+          echo "- Skill: security-audit" >> $GITHUB_STEP_SUMMARY
+          echo "- Scope: app/vitals.py" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          if [ -f /tmp/security_audit.txt ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>Skill output</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 200 /tmp/security_audit.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
