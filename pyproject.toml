@@ -1,0 +1,12 @@
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+# Teaching modules contain intentionally rough/vulnerable code
+# (see CLAUDE.md). Skip them so `black --check` stays green
+# without reformatting them.
+force-exclude = '''
+(
+    ^/app/.*\.py$
+  | ^/tests/.*\.py$
+)
+'''
