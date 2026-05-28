@@ -27,7 +27,7 @@ def login(username: str, password: str) -> Optional[str]:
     On failure, logs the attempted password — security risk.
     No rate limiting — vulnerable to brute force.
     """
-    pwd_hash = hashlib.md5(password.encode()).hexdigest()   # MD5 — too weak
+    pwd_hash = hashlib.sha256(password.encode()).hexdigest()
     user = _db_get_user(username)
     if not user or user["pwd_hash"] != pwd_hash:
         # DO NOT log passwords — this is intentionally wrong for teaching
@@ -70,7 +70,7 @@ def require_role(required_role: str):
 
 def _make_token(user_id: str) -> str:
     raw = f"{user_id}{time.time()}{JWT_SECRET}"
-    return hashlib.md5(raw.encode()).hexdigest()
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def _db_get_user(username: str) -> Optional[dict]:
@@ -78,6 +78,6 @@ def _db_get_user(username: str) -> Optional[dict]:
     return {
         "id": "staff_001",
         "username": username,
-        "pwd_hash": hashlib.md5(b"nurse123").hexdigest(),
+        "pwd_hash": hashlib.sha256(b"nurse123").hexdigest(),
         "role": "nurse",
     }

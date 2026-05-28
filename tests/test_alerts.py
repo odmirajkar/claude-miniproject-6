@@ -13,14 +13,16 @@ class TestGetActiveAlerts:
     @patch("app.alerts._execute_read", return_value=[{"id": "a1"}])
     def test_without_ward(self, mock_read):
         assert get_active_alerts() == [{"id": "a1"}]
-        sent_query = mock_read.call_args[0][0]
+        sent_query, sent_params = mock_read.call_args[0]
         assert "ward_id" not in sent_query
+        assert sent_params == ()
 
     @patch("app.alerts._execute_read", return_value=[])
     def test_with_ward(self, mock_read):
         assert get_active_alerts(ward_id="ward_A") == []
-        sent_query = mock_read.call_args[0][0]
-        assert "ward_id = 'ward_A'" in sent_query
+        sent_query, sent_params = mock_read.call_args[0]
+        assert "p.ward_id = %s" in sent_query
+        assert sent_params == ("ward_A",)
 
 
 class TestAcknowledgeAlert:
@@ -29,9 +31,10 @@ class TestAcknowledgeAlert:
     def test_returns_success(self, mock_write):
         result = acknowledge_alert("alert_42", "nurse_07")
         assert result == {"success": True, "alert_id": "alert_42"}
-        sent_query = mock_write.call_args[0][0]
-        assert "alert_42" in sent_query
-        assert "ack_by='nurse_07'" in sent_query
+        sent_query, sent_params = mock_write.call_args[0]
+        assert "ack_by=%s" in sent_query
+        assert "id = %s" in sent_query
+        assert sent_params == ("nurse_07", "alert_42")
 
 
 class TestEscalateAlert:

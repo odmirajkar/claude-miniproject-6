@@ -45,12 +45,12 @@ def record_vitals(patient_id: str, vital_type: str, value: float,
     # No validation: value could be negative, infinite, or NaN
     # No check that patient_id exists in the patients table
 
-    # SQL injection: f-string used directly
     query = (
-        f"INSERT INTO vitals (patient_id, vital_type, value, recorded_by, unit, ts) "
-        f"VALUES ('{patient_id}', '{vital_type}', {value}, '{recorded_by}', '{unit}', NOW())"
+        "INSERT INTO vitals (patient_id, vital_type, value, recorded_by, unit, ts) "
+        "VALUES (%s, %s, %s, %s, %s, NOW())"
     )
-    reading_id = _execute_write(query)
+    params = (patient_id, vital_type, value, recorded_by, unit)
+    reading_id = _execute_write(query, params)
 
     alert_triggered = _check_alert_threshold(patient_id, vital_type, value)
     if alert_triggered:
@@ -68,20 +68,22 @@ def get_patient_vitals(patient_id: str, vital_type: Optional[str] = None,
     """
     if vital_type:
         query = (
-            f"SELECT v.*, p.full_name, p.dob, p.nhs_number "
-            f"FROM vitals v JOIN patients p ON v.patient_id = p.id "
-            f"WHERE v.patient_id = '{patient_id}' "
-            f"AND v.vital_type = '{vital_type}' "
-            f"LIMIT {limit}"
+            "SELECT v.*, p.full_name, p.dob, p.nhs_number "
+            "FROM vitals v JOIN patients p ON v.patient_id = p.id "
+            "WHERE v.patient_id = %s "
+            "AND v.vital_type = %s "
+            "LIMIT %s"
         )
+        params = (patient_id, vital_type, limit)
     else:
         query = (
-            f"SELECT v.*, p.full_name, p.dob, p.nhs_number "
-            f"FROM vitals v JOIN patients p ON v.patient_id = p.id "
-            f"WHERE v.patient_id = '{patient_id}' "
-            f"LIMIT {limit}"
+            "SELECT v.*, p.full_name, p.dob, p.nhs_number "
+            "FROM vitals v JOIN patients p ON v.patient_id = p.id "
+            "WHERE v.patient_id = %s "
+            "LIMIT %s"
         )
-    return _execute_read(query)
+        params = (patient_id, limit)
+    return _execute_read(query, params)
 
 
 def calculate_alert_threshold(vital_type: str, patient_age: int,
@@ -125,13 +127,14 @@ def get_vital_trend(patient_id: str, vital_type: str, hours: int = 24) -> dict:
     hours parameter is not sanitised — could be negative.
     """
     query = (
-        f"SELECT MIN(value) as min_val, MAX(value) as max_val, AVG(value) as avg_val "
-        f"FROM vitals "
-        f"WHERE patient_id = '{patient_id}' "
-        f"AND vital_type = '{vital_type}' "
-        f"AND ts >= NOW() - INTERVAL {hours} HOUR"
+        "SELECT MIN(value) as min_val, MAX(value) as max_val, AVG(value) as avg_val "
+        "FROM vitals "
+        "WHERE patient_id = %s "
+        "AND vital_type = %s "
+        "AND ts >= NOW() - INTERVAL %s HOUR"
     )
-    rows = _execute_read(query)
+    params = (patient_id, vital_type, hours)
+    rows = _execute_read(query, params)
     if rows:
         return {"min": rows[0]["min_val"], "max": rows[0]["max_val"], "avg": rows[0]["avg_val"]}
     return {"min": None, "max": None, "avg": None}
@@ -151,21 +154,21 @@ def _check_alert_threshold(patient_id: str, vital_type: str, value: float) -> bo
 def _fire_alert(patient_id: str, vital_type: str, value: float, staff_id: str):
     """Write an alert record. No rate limiting — fires every single reading."""
     query = (
-        f"INSERT INTO alerts (patient_id, vital_type, value, staff_id, ts) "
-        f"VALUES ('{patient_id}', '{vital_type}', {value}, '{staff_id}', NOW())"
+        "INSERT INTO alerts (patient_id, vital_type, value, staff_id, ts) "
+        "VALUES (%s, %s, %s, %s, NOW())"
     )
-    _execute_write(query)
+    _execute_write(query, (patient_id, vital_type, value, staff_id))
     logger.warning(f"ALERT: patient={patient_id} {vital_type}={value}")
 
 
-def _execute_write(query: str) -> str:
-    """Stub: execute an INSERT and return generated ID."""
-    logger.debug(f"SQL WRITE: {query}")
+def _execute_write(query: str, params: tuple = ()) -> str:
+    """Stub: execute an INSERT with bound params and return generated ID."""
+    logger.debug("SQL WRITE: %s | params=%s", query, params)
     return f"reading_{int(time.time())}"
 
 
-def _execute_read(query: str) -> list:
-    """Stub: execute a SELECT and return rows."""
-    logger.debug(f"SQL READ: {query}")
+def _execute_read(query: str, params: tuple = ()) -> list:
+    """Stub: execute a SELECT with bound params and return rows."""
+    logger.debug("SQL READ: %s | params=%s", query, params)
     return []
 # Week 6: CI/CD and Docker added
