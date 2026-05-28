@@ -1,0 +1,13 @@
+[flake8]
+max-line-length = 120
+# E203, W503: defer to black's whitespace/line-break style
+# E221, E302, E127, E401, E402, F401: tolerated in teaching modules
+#   that intentionally contain rough/vulnerable code (see CLAUDE.md)
+extend-ignore = E203, W503, E221, E302, E127, E401, E402, F401
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    build,
+    dist

@@ -2,6 +2,8 @@
 app/routes.py
 Flask route definitions for HealthTrack API.
 """
+from __future__ import annotations
+
 from flask import Blueprint, request, jsonify
 from .vitals import record_vitals, get_patient_vitals, get_vital_trend
 from .alerts import get_active_alerts, acknowledge_alert, escalate_alert
