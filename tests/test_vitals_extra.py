@@ -20,17 +20,20 @@ class TestGetPatientVitals:
     def test_with_vital_type(self, mock_read):
         rows = get_patient_vitals("p001", vital_type="heart_rate", limit=50)
         assert rows == [{"id": 1}]
-        sent_query = mock_read.call_args[0][0]
-        assert "vital_type = 'heart_rate'" in sent_query
-        assert "LIMIT 50" in sent_query
+        sent_query, sent_params = mock_read.call_args[0]
+        assert "v.patient_id = %s" in sent_query
+        assert "v.vital_type = %s" in sent_query
+        assert "LIMIT %s" in sent_query
+        assert sent_params == ("p001", "heart_rate", 50)
 
     @patch("app.vitals._execute_read", return_value=[])
     def test_without_vital_type(self, mock_read):
         rows = get_patient_vitals("p001")
         assert rows == []
-        sent_query = mock_read.call_args[0][0]
+        sent_query, sent_params = mock_read.call_args[0]
         assert "vital_type" not in sent_query
-        assert "LIMIT 100" in sent_query
+        assert "LIMIT %s" in sent_query
+        assert sent_params == ("p001", 100)
 
 
 class TestCalculateAlertThresholdEdgeCases:
@@ -73,7 +76,9 @@ class TestGetVitalTrend:
     def test_with_rows(self, mock_read):
         result = get_vital_trend("p001", "heart_rate", hours=12)
         assert result == {"min": 60, "max": 100, "avg": 80}
-        assert "INTERVAL 12 HOUR" in mock_read.call_args[0][0]
+        sent_query, sent_params = mock_read.call_args[0]
+        assert "INTERVAL %s HOUR" in sent_query
+        assert sent_params == ("p001", "heart_rate", 12)
 
     @patch("app.vitals._execute_read", return_value=[])
     def test_empty_rows(self, mock_read):

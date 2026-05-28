@@ -94,9 +94,9 @@ class TestRequireRole:
 
 class TestMakeToken:
 
-    def test_token_is_md5_hex(self):
+    def test_token_is_sha256_hex(self):
         token = auth._make_token("staff_001")
-        assert len(token) == 32
+        assert len(token) == 64
         int(token, 16)  # must be valid hex
 
 
@@ -104,5 +104,5 @@ class TestDbGetUserStub:
 
     def test_stub_shape(self):
         u = auth._db_get_user("anyone")
-        assert u["pwd_hash"] == hashlib.md5(b"nurse123").hexdigest()
+        assert u["pwd_hash"] == hashlib.sha256(b"nurse123").hexdigest()
         assert u["role"] == "nurse"

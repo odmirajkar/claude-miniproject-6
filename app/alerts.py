@@ -25,17 +25,19 @@ def get_active_alerts(ward_id: Optional[str] = None) -> list:
     """
     if ward_id:
         query = (
-            f"SELECT a.*, p.full_name, p.room_number "
-            f"FROM alerts a JOIN patients p ON a.patient_id = p.id "
-            f"WHERE a.acknowledged = 0 AND p.ward_id = '{ward_id}'"
+            "SELECT a.*, p.full_name, p.room_number "
+            "FROM alerts a JOIN patients p ON a.patient_id = p.id "
+            "WHERE a.acknowledged = 0 AND p.ward_id = %s"
         )
+        params = (ward_id,)
     else:
         query = (
             "SELECT a.*, p.full_name, p.room_number "
             "FROM alerts a JOIN patients p ON a.patient_id = p.id "
             "WHERE a.acknowledged = 0"
         )
-    return _execute_read(query)
+        params = ()
+    return _execute_read(query, params)
 
 
 def acknowledge_alert(alert_id: str, staff_id: str) -> dict:
@@ -45,10 +47,10 @@ def acknowledge_alert(alert_id: str, staff_id: str) -> dict:
     Any nurse can acknowledge any alert in any ward.
     """
     query = (
-        f"UPDATE alerts SET acknowledged=1, ack_by='{staff_id}', ack_ts=NOW() "
-        f"WHERE id = '{alert_id}'"
+        "UPDATE alerts SET acknowledged=1, ack_by=%s, ack_ts=NOW() "
+        "WHERE id = %s"
     )
-    _execute_write(query)
+    _execute_write(query, (staff_id, alert_id))
     return {"success": True, "alert_id": alert_id}
 
 
@@ -71,11 +73,11 @@ def escalate_alert(alert_id: str, reason: str) -> dict:
 
 DB_HOST = "db.healthtrack.internal"
 
-def _execute_write(query):
-    logger.debug(f"SQL WRITE: {query}")
+def _execute_write(query, params=()):
+    logger.debug("SQL WRITE: %s | params=%s", query, params)
 
-def _execute_read(query) -> list:
-    logger.debug(f"SQL READ: {query}")
+def _execute_read(query, params=()) -> list:
+    logger.debug("SQL READ: %s | params=%s", query, params)
     return []
 
 def _get_alert(alert_id: str) -> Optional[dict]:
